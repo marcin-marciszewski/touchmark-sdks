@@ -1,0 +1,237 @@
+/**
+ * The Touchmark API client. Types come from the API's OpenAPI document
+ * (src/gen, generated); the requests, errors and retries are written here.
+ */
+import type * as T from "./gen/types.gen.js"
+
+export type * from "./gen/types.gen.js"
+
+export const DEFAULT_BASE_URL = "https://api.touchmark.dev"
+/** Retries of a 429 or a 503 upstream_unavailable: the API charges for neither. */
+export const DEFAULT_MAX_RETRIES = 2
+/** The API's longest long poll for a mailbox check. */
+export const MAX_WAIT_SECONDS = 10
+const MAX_RETRY_DELAY_SECONDS = 30
+
+export interface TouchmarkOptions {
+  /** API key (vld_live_…). Defaults to the TOUCHMARK_API_KEY environment variable. */
+  apiKey?: string
+  /** Defaults to https://api.touchmark.dev. */
+  baseUrl?: string
+  /** Retries of 429 and 503 upstream_unavailable answers; 0 turns them off. */
+  maxRetries?: number
+  /** A fetch implementation; defaults to the global fetch. */
+  fetch?: typeof fetch
+}
+
+/** Any answer that is not 2xx, read from the API's problem document. */
+export class TouchmarkError extends Error {
+  readonly status: number
+  readonly code: string
+  readonly detail: string | null
+  readonly requestId: string | null
+  readonly retryAfter: number | null
+
+  constructor(init: {
+    status: number
+    code: string
+    detail: string | null
+    requestId: string | null
+    retryAfter: number | null
+  }) {
+    super(`${init.code}: ${init.detail ?? `HTTP ${init.status}`}`)
+    this.name = "TouchmarkError"
+    this.status = init.status
+    this.code = init.code
+    this.detail = init.detail
+    this.requestId = init.requestId
+    this.retryAfter = init.retryAfter
+  }
+}
+
+type Query = Record<string, string | number>
+
+function environmentKey(): string | undefined {
+  const process = (
+    globalThis as { process?: { env?: Record<string, string | undefined> } }
+  ).process
+  return process?.env?.TOUCHMARK_API_KEY
+}
+
+function retryAfterSeconds(response: Response): number | null {
+  const value = response.headers.get("retry-after")
+  if (value === null) return null
+  const seconds = Number(value)
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null
+}
+
+function retryable(status: number, code: string): boolean {
+  return status === 429 || (status === 503 && code === "upstream_unavailable")
+}
+
+const sleep = (seconds: number) =>
+  new Promise((resolve) => setTimeout(resolve, seconds * 1000))
+
+export class Touchmark {
+  readonly #apiKey: string
+  readonly #baseUrl: string
+  readonly #maxRetries: number
+  readonly #fetch: typeof fetch
+
+  constructor(options: TouchmarkOptions = {}) {
+    const apiKey = options.apiKey ?? environmentKey()
+    if (!apiKey) {
+      throw new Error(
+        "Touchmark: pass apiKey or set the TOUCHMARK_API_KEY environment variable.",
+      )
+    }
+    this.#apiKey = apiKey
+    this.#baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "")
+    this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES
+    this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis)
+  }
+
+  readonly email = {
+    /** Syntax, MX, disposable and free-provider domains, role accounts. 1 credit. */
+    validate: (body: T.ValidateEmailData["body"]) =>
+      this.#request<T.ValidateEmailResponses[200]>(
+        "POST",
+        "/v1/email/validate",
+        body,
+      ),
+    /** Up to 100 addresses, answered in order. 1 credit each. */
+    validateBatch: (body: T.ValidateEmailBatchData["body"]) =>
+      this.#request<T.ValidateEmailBatchResponses[200]>(
+        "POST",
+        "/v1/email/validate/batch",
+        body,
+      ),
+    /** Starts a mailbox check; a queued answer carries its id. Up to 5 credits. */
+    verify: (body: T.VerifyEmailData["body"]) =>
+      this.#request<T.VerifyEmailResponse>("POST", "/v1/email/verify", body),
+    /** A mailbox check, waiting up to `wait` seconds (at most 10) for it to finish. Free. */
+    getVerification: (
+      verificationId: string,
+      options: { wait?: number } = {},
+    ) =>
+      this.#request<T.GetVerificationResponses[200]>(
+        "GET",
+        `/v1/email/verify/${encodeURIComponent(verificationId)}`,
+        undefined,
+        options.wait === undefined ? undefined : { wait: options.wait },
+      ),
+    /** Polls a mailbox check until it is done or `timeoutSeconds` pass; the last answer. Free. */
+    waitForVerification: async (
+      verificationId: string,
+      options: { timeoutSeconds?: number } = {},
+    ) => {
+      const deadline = Date.now() + (options.timeoutSeconds ?? 60) * 1000
+      for (;;) {
+        const left = Math.ceil((deadline - Date.now()) / 1000)
+        const wait = Math.min(MAX_WAIT_SECONDS, Math.max(left, 0))
+        const answer = await this.email.getVerification(verificationId, {
+          wait,
+        })
+        if (answer.status === "done" || Date.now() >= deadline) return answer
+      }
+    },
+  }
+
+  readonly domain = {
+    /** The domain's DNS against the Gmail, Yahoo and Microsoft sender rules. 2 credits. */
+    senderReadiness: (body: T.SenderReadinessData["body"]) =>
+      this.#request<T.SenderReadinessResponses[200]>(
+        "POST",
+        "/v1/domain/sender-readiness",
+        body,
+      ),
+  }
+
+  readonly ip = {
+    /** Country, network owner, hosting company and Tor exit. 1 credit. */
+    lookup: (body: T.LookupIpData["body"]) =>
+      this.#request<T.LookupIpResponses[200]>("POST", "/v1/ip/lookup", body),
+    /** Up to 100 addresses, answered in order. 1 credit each. */
+    lookupBatch: (body: T.LookupIpBatchData["body"]) =>
+      this.#request<T.LookupIpBatchResponses[200]>(
+        "POST",
+        "/v1/ip/lookup/batch",
+        body,
+      ),
+  }
+
+  readonly phone = {
+    /** Numbering-plan validity, formats, country and line type. 1 credit. */
+    validate: (body: T.ValidatePhoneData["body"]) =>
+      this.#request<T.ValidatePhoneResponses[200]>(
+        "POST",
+        "/v1/phone/validate",
+        body,
+      ),
+    /** Up to 100 numbers, answered in order. 1 credit each. */
+    validateBatch: (body: T.ValidatePhoneBatchData["body"]) =>
+      this.#request<T.ValidatePhoneBatchResponses[200]>(
+        "POST",
+        "/v1/phone/validate/batch",
+        body,
+      ),
+  }
+
+  readonly account = {
+    /** The credit balance and tier. Free. */
+    get: () => this.#request<T.ReadAccountResponses[200]>("GET", "/v1/account"),
+  }
+
+  async #request<R>(
+    method: "GET" | "POST",
+    path: string,
+    body?: unknown,
+    query?: Query,
+  ): Promise<R> {
+    const url = new URL(this.#baseUrl + path)
+    for (const [name, value] of Object.entries(query ?? {})) {
+      url.searchParams.set(name, String(value))
+    }
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.#apiKey}`,
+      Accept: "application/json",
+    }
+    if (body !== undefined) headers["Content-Type"] = "application/json"
+    for (let attempt = 0; ; attempt++) {
+      // A network error is not retried: a POST may already have been charged.
+      const response = await this.#fetch(url, {
+        method,
+        headers,
+        redirect: "manual", // never send the key or body to another origin
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+      if (response.ok) return (await response.json()) as R
+      const error = await toError(response)
+      if (attempt >= this.#maxRetries || !retryable(error.status, error.code)) {
+        throw error
+      }
+      await sleep(
+        Math.min(error.retryAfter ?? attempt + 1, MAX_RETRY_DELAY_SECONDS),
+      )
+    }
+  }
+}
+
+async function toError(response: Response): Promise<TouchmarkError> {
+  let problem: { code?: unknown; detail?: unknown } = {}
+  try {
+    problem = (await response.json()) as typeof problem
+  } catch {
+    // Not a problem document (a proxy's error page, for example).
+  }
+  return new TouchmarkError({
+    status: response.status,
+    code:
+      typeof problem.code === "string"
+        ? problem.code
+        : `http_${response.status}`,
+    detail: typeof problem.detail === "string" ? problem.detail : null,
+    requestId: response.headers.get("x-request-id"),
+    retryAfter: retryAfterSeconds(response),
+  })
+}
