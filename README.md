@@ -1,0 +1,57 @@
+# Touchmark SDKs
+
+Official client libraries for the [Touchmark API](https://api.touchmark.dev/docs): email validation and mailbox checks, sender readiness, IP lookup and phone number validation.
+
+| Language | Package | Folder |
+| --- | --- | --- |
+| TypeScript / JavaScript | [`touchmark`](https://www.npmjs.com/package/touchmark) on npm | [`typescript/`](typescript/) |
+| Python | [`touchmark`](https://pypi.org/project/touchmark/) on PyPI | [`python/`](python/) |
+
+## TypeScript
+
+```bash
+npm install touchmark
+```
+
+```ts
+import { Touchmark } from "touchmark"
+
+const tm = new Touchmark({ apiKey: process.env.TOUCHMARK_API_KEY })
+const answer = await tm.email.validate({ email: "jane@acme.com" })
+console.log(answer.result)
+```
+
+## Python
+
+```bash
+pip install touchmark
+```
+
+```python
+from touchmark import Touchmark
+
+tm = Touchmark()  # reads TOUCHMARK_API_KEY
+answer = tm.email.validate(email="jane@acme.com")
+print(answer.result)
+```
+
+`AsyncTouchmark` offers the same methods with `await`.
+
+## Behaviour
+
+- Every call costs the credits of the API call it makes; see the API reference.
+- Errors raise `TouchmarkError` with `status`, `code`, `detail`, `request_id` and `retry_after`.
+- Only `429` (after `Retry-After`) and `503 upstream_unavailable` answers are retried, at most twice: the API charges for neither. A request that may already have been charged is never retried.
+- `email.verify` returns at once; `email.wait_for_verification` (`waitForVerification` in TypeScript) waits for a mailbox check to finish.
+
+## Terms and privacy
+
+Using the Touchmark API is subject to the [Terms of Service](https://touchmark.dev/legal/terms) and the [Acceptable Use Policy](https://touchmark.dev/legal/acceptable-use). The SDKs collect nothing: they send your requests only to the API base URL you configure (`https://api.touchmark.dev` by default) and include no telemetry.
+
+## Licence
+
+MIT; see [LICENSE](LICENSE). The licence covers the code only and grants no rights to the Touchmark name or logo. The MIT notices of the two code generators are kept in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) as a courtesy. The Python package depends on `httpx` (BSD-3-Clause), `attrs` (MIT) and `python-dateutil` (Apache-2.0 or BSD-3-Clause), installed from PyPI.
+
+## Keeping in step with the API
+
+`bash scripts/sync-openapi.sh` downloads the public API document into `openapi/openapi.json`; `bash scripts/generate.sh` regenerates both clients from it. CI fails if the generated code does not match the document.
