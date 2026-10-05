@@ -2,6 +2,16 @@
 
 Only the owner publishes. Agents prepare releases but never push, tag or publish.
 
+## Before the first release
+
+The clients are generated from `openapi/openapi.json`. Before you publish, check that it equals the document production serves:
+
+```bash
+bash scripts/sync-openapi.sh && git diff --exit-code openapi/openapi.json
+```
+
+Expected: no diff. A diff means production serves a different document: deploy `validation-api` first, or regenerate (`bash scripts/generate.sh`), review and commit, then check again.
+
 ## Once: the public repository
 
 1. Create the empty public repository and push this folder (from this folder):
@@ -44,7 +54,7 @@ Only the owner publishes. Agents prepare releases but never push, tag or publish
 
 ## After an API change
 
-Run `scripts/sync-openapi.sh` only once the API change (for the first sync: the operation-ID change from validation-api) is deployed to production, because the script fetches production's document.
+Run `scripts/sync-openapi.sh` only once the API change is deployed to production, because the script fetches production's document.
 
 ```bash
 bash scripts/sync-openapi.sh   # downloads https://api.touchmark.dev/v1/openapi.json

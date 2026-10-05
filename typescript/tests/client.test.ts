@@ -173,20 +173,16 @@ describe("methods", () => {
     expect(calls[0]?.init.body).toBeUndefined()
   })
 
-  it.each([
-    "",
-    ".",
-    "..",
-    "../../health",
-    "a/b",
-    "v1",
-  ])("refuses the verification id %j before sending", async (id) => {
-    const { calls, fetch } = fakeFetch(json(200, { status: "done" }))
-    const tm = new Touchmark({ apiKey: "k", fetch })
-    await expect(tm.email.getVerification(id)).rejects.toThrow(TypeError)
-    await expect(tm.email.waitForVerification(id)).rejects.toThrow(TypeError)
-    expect(calls).toHaveLength(0)
-  })
+  it.each(["", ".", "..", "../../health", "a/b", "v1"])(
+    "refuses the verification id %j before sending",
+    async (id) => {
+      const { calls, fetch } = fakeFetch(json(200, { status: "done" }))
+      const tm = new Touchmark({ apiKey: "k", fetch })
+      await expect(tm.email.getVerification(id)).rejects.toThrow(TypeError)
+      await expect(tm.email.waitForVerification(id)).rejects.toThrow(TypeError)
+      expect(calls).toHaveLength(0)
+    },
+  )
 })
 
 describe("errors and retries", () => {
@@ -355,9 +351,7 @@ describe("waitForVerification", () => {
   })
 
   it("returns the last answer when the time is up", async () => {
-    const { calls, fetch } = fakeFetch(
-      json(200, { id: ID, status: "queued" }),
-    )
+    const { calls, fetch } = fakeFetch(json(200, { id: ID, status: "queued" }))
     const answer = await new Touchmark({
       apiKey: "k",
       fetch,

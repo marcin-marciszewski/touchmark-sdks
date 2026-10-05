@@ -6,11 +6,11 @@ from typing import Any, TypeVar, cast
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-T = TypeVar("T", bound="ValidatePhoneProblem")
+T = TypeVar("T", bound="Problem")
 
 
 @_attrs_define
-class ValidatePhoneProblem:
+class Problem:
     """An RFC 9457 problem document: the body of every error response.
 
     Attributes:
@@ -79,7 +79,7 @@ class ValidatePhoneProblem:
 
         request_id = _parse_request_id(d.pop("request_id"))
 
-        validate_phone_problem = cls(
+        problem = cls(
             type_=type_,
             title=title,
             status=status,
@@ -88,8 +88,8 @@ class ValidatePhoneProblem:
             request_id=request_id,
         )
 
-        validate_phone_problem.additional_properties = d
-        return validate_phone_problem
+        problem.additional_properties = d
+        return problem
 
     @property
     def additional_keys(self) -> list[str]:

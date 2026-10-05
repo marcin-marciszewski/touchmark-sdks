@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Touchmark API",
-    "description": "\nValidate email addresses: syntax, DNS/MX, disposable and free-provider domains, role\naccounts and typo suggestions. Verify that a mailbox exists by asking its mail server.\nCheck a sending domain's DNS against the Gmail, Yahoo and Microsoft bulk-sender rules.\nLook up an IP address: country, network owner, hosting or cloud company and Tor exit.\nCheck a phone number against its country's numbering plan: format, country, line type\nand original carrier.\n\n## Authentication\nSend your API key as a bearer token: `Authorization: Bearer vld_live_…`. Create keys\nin the dashboard.\n\n## Credits\nOne balance pays for every endpoint. `POST /v1/email/validate` costs 1 credit;\n`POST /v1/email/validate/batch` costs 1 credit per address (up to 100);\n`POST /v1/email/verify` costs 5 credits, or 1 when the result is `unknown` or the\naddress is invalid before the mailbox check; `POST /v1/domain/sender-readiness` costs\n2 credits; `POST /v1/ip/lookup` costs 1 credit, and `POST /v1/ip/lookup/batch` 1 credit\nper address (up to 100); `POST /v1/phone/validate` costs 1 credit, and\n`POST /v1/phone/validate/batch` 1 credit per number (up to 100). Every paid response\ncarries the remaining balance in `X-Credits-Remaining`.\n\n## Rate limits\nResponses carry `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset`.\nA `429` response includes `Retry-After`.\n\n## Results and reasons\nEvery validation has one `result`. When several apply, the first in this list wins\n(`invalid` > `unknown` > `risky` > `valid`):\n\n- `invalid`: the address cannot receive mail. Its syntax is rejected, or its domain\n  does not exist, publishes a null MX or has no mail records.\n- `unknown`: DNS gave no definite answer (server failure, refusal or timeout). Try\n  again later.\n- `risky`: the domain accepts mail but belongs to a disposable-email provider.\n- `valid`: the domain accepts mail and no risk flags apply.\n\n`valid` from `validate` means the domain accepts mail and no risk flags apply. It does\n**not** mean the mailbox exists: `validate` never contacts the mail server, so\n`checks.mailbox.status` is `not_checked`.\n\n`reasons` lists every rule that matched:\n\n- `invalid_syntax`: the address fails the syntax policy. Quoted local parts, IP\n  literals and single-label domains are rejected even where the RFCs allow them.\n- `domain_not_found`: the domain does not exist (NXDOMAIN).\n- `null_mx`: the domain publishes a null MX record (RFC 7505), so it accepts no mail.\n- `no_mail_records`: the domain has neither an MX record nor an A or AAAA record.\n- `dns_error`: the DNS lookup failed (server failure, refusal or timeout). The result\n  is `unknown`, never `invalid`.\n- `implicit_mx`: the domain has no MX record, so mail goes to its A or AAAA record.\n  The domain still accepts mail.\n- `disposable`: the domain, or a parent domain, belongs to a disposable-email\n  provider. The result is `risky`.\n- `free_provider`: the domain is a free email provider such as gmail.com. It does not\n  change the result.\n- `role_account`: the local part names a role, such as `info` or `support`, rather\n  than a person (a `+tag` is ignored). It does not change the result.\n\nChanges within `/v1` are additive: new fields and new reason codes may appear.\nClients must ignore unknown fields and unknown reason codes.\n\n`datasets` gives the version of each domain list (`disposable`, `free_provider`) that\nproduced the flags. The values are opaque version identifiers: compare them for\nequality, but do not parse them.\n\n## Mailbox verification\n`POST /v1/email/verify` runs the `validate` checks and then asks the address's mail\nserver whether the mailbox exists. It needs the `email:verify` scope and a completed\npurchase (`403 tier_required` otherwise), and an account may submit 10 per second.\nThe mail server is never sent a message.\n\nWhen the answer is known at once (the address is invalid, the mailbox was checked\nrecently, or the check cannot run) the call returns `200` with `status: \"done\"` and\n`id: null`. Otherwise it returns `202` with an `id`, `status: \"queued\"`, the `validate`\nresult and `checks.mailbox.status` `pending`; 5 credits are charged, and 4 come back if\nthe check ends `unknown`. `GET /v1/email/verify/{id}` returns the check for free; with\n`?wait=N` (up to 10) it waits that many seconds for the check to finish. A server that\nasks to try again later is retried after 10 and 30 minutes. Results are kept for 7\ndays; once the check is done, `email`, `normalized` and `did_you_mean` are null, because\nthe address itself is not kept.\n\n`checks.mailbox.status` is `exists`, `not_exists`, `catch_all` (the domain accepts mail\nfor any address), `unknown`, `pending`, or `not_checked` (the `validate` checks already\ndecided: the address is invalid, or DNS gave no answer). `not_exists` makes the result\n`invalid` and adds the reason `mailbox_not_found`; `catch_all` makes it `risky` and adds\n`catch_all`. An `unknown` mailbox makes the result `unknown`, and its reason appears in\n`checks.mailbox.reason` and in `reasons`:\n\n- `greylisted`: the server kept asking us to try again later.\n- `connection_failed`: no mail server of the domain could be reached.\n- `probe_blocked`: the server refused the check itself.\n- `provider_unverifiable`: the provider accepts every address (Microsoft 365), or the\n  server cannot take this address, so no answer would be meaningful.\n- `capacity_exceeded`: today's mailbox-check capacity is used up.\n- `domain_limit`: this account checked 200 addresses at this domain today.\n- `smtp_unavailable`: mailbox checks are paused on our side.\n\n## Sender readiness\n`POST /v1/domain/sender-readiness` checks the DNS side of the bulk-sender rules: SPF\n(one record, at most 10 DNS lookups, not `+all`), DKIM (a key under a common selector\nor one you pass in `dkim_selectors`) and DMARC (`p` of `none`, `quarantine` or\n`reject`). It also reports MX, MTA-STS, TLS-RPT and BIMI records. `dns_ready` gives\n`pass`, `warn` or `fail` for Gmail, Yahoo and Microsoft, and `gaps` says what to fix.\nDNS cannot show complaint rates, one-click unsubscribe or DMARC alignment in practice,\nso `not_checked` lists them. When DNS lookups fail, the call returns\n`503 upstream_unavailable` and costs nothing. After 10 such answers in 10 minutes an\naccount gets `429 rate_limited` with `Retry-After`.\n\n## IP lookup\n`POST /v1/ip/lookup` takes one IPv4 or IPv6 address; `POST /v1/ip/lookup/batch` takes\nup to 100 and answers in input order. They need the `ip:lookup` scope. A value that is\nnot an address is `422 validation_error` for the whole call, and nothing is charged.\nEvery answer comes from datasets held on our servers; the address is not sent anywhere.\n\n- `country` and `continent` are a geolocation estimate at country level, from\n  [IP Geolocation by DB-IP](https://db-ip.com). If you display them, keep that credit\n  next to them.\n- `asn` is the autonomous system that announces the address (DB-IP).\n- `network` is `{\"type\": \"hosting\", \"provider\": …}` when the address belongs to the\n  autonomous system of a hosting or cloud company (for example `aws`, `gcp`, `ovh`,\n  `hetzner`), from our own list; `null` means it is not on that list, not that the\n  address is residential.\n- `tor_exit` says whether the address is a Tor exit (Tor Project list). It is `null`\n  for IPv6: the list holds IPv4 exits only.\n- `scope` is `global` for a public address. Private, shared (CGNAT), loopback,\n  link-local, multicast, unspecified and reserved addresses get their scope and no\n  other data, and still cost 1 credit.\n- `datasets` gives the version of each dataset read, or `null` for one not loaded yet.\n\n## Phone validation\n`POST /v1/phone/validate` takes one phone number; `POST /v1/phone/validate/batch` takes\nup to 100 and answers in input order. They need the `phone:validate` scope. Write\nnumbers in international form (`+44 20 7946 0000`), or pass `country` (an ISO 3166-1\nalpha-2 code) for numbers written without `+`. Any string is answered and costs 1\ncredit; a malformed request (an empty `phone`, a number longer than 64 characters, an unknown `country`)\nis `422 validation_error`, and nothing is charged. Every answer comes from Google's\nlibphonenumber numbering-plan data held on our servers; the number is not sent anywhere.\n\n- `valid` means the number fits its country's numbering plan. It does not mean the\n  number is assigned, in service or reachable. `reason` says why a number is not\n  valid: `not_a_number`, `no_country_code` (written without `+` and no `country`\n  given), `invalid_country_code`, `too_short`, `too_long`, `invalid_length` or\n  `not_in_plan`.\n- `type` is the line type from the numbering plan. The North American plan (the United\n  States, Canada and much of the Caribbean) does not separate mobile numbers, so its\n  numbers are `fixed_line_or_mobile`.\n- `original_carrier` is the network the number range was first allocated to. Numbers\n  move between networks, so it is not necessarily the current one. It is `null` for\n  most landlines and North American numbers.\n- `region` is the area of a landline range, such as a city. It describes the number\n  range, not where anyone is.\n- `country` is `null` for a number that is not valid and for non-geographic numbers\n  (such as `+800`).\n- `datasets` gives the version of the numbering-plan data used.\n\n## Errors\nErrors are RFC 9457 `application/problem+json` documents with a stable `code`.\nSee the [error reference](/docs/errors).\n\n## MCP server\nAI agents can call these checks as tools through the MCP server at `https://api.touchmark.dev/mcp`\n(Streamable HTTP). Send your API key as for any other call:\n`Authorization: Bearer vld_live_…`. Each tool calls the endpoint above it stands\nfor and costs the same credits, with the same scopes and limits: `validate_email`\n(1), `verify_email` (up to 5; waits up to about 25 seconds, then returns the\ncheck's `id`), `get_email_verification` (free), `check_sender_readiness` (2),\n`lookup_ip` (1), `validate_phone` (1) and `get_account` (free).\n\nClaude Code:\n`claude mcp add --transport http touchmark https://api.touchmark.dev/mcp --header \"Authorization: Bearer vld_live_…\"`\n\nCursor (`~/.cursor/mcp.json`):\n`{\"mcpServers\": {\"touchmark\": {\"url\": \"https://api.touchmark.dev/mcp\", \"headers\": {\"Authorization\": \"Bearer vld_live_…\"}}}}`\n\nVS Code (`.vscode/mcp.json`):\n`{\"servers\": {\"touchmark\": {\"type\": \"http\", \"url\": \"https://api.touchmark.dev/mcp\", \"headers\": {\"Authorization\": \"Bearer vld_live_…\"}}}}`\n\n## SDKs\nOfficial client libraries for TypeScript and Python, under the MIT licence:\n[github.com/marcin-marciszewski/touchmark-sdks](https://github.com/marcin-marciszewski/touchmark-sdks).\n\n- TypeScript: `npm install touchmark`, then\n  `const tm = new Touchmark({ apiKey: process.env.TOUCHMARK_API_KEY })` and\n  `await tm.email.validate({ email: \"jane@acme.com\" })`.\n- Python: `pip install touchmark`, then `tm = Touchmark()` (reads\n  `TOUCHMARK_API_KEY`) and `tm.email.validate(email=\"jane@acme.com\")`.\n\n## Terms\nUse of the API is subject to the [Terms of Service](https://touchmark.dev/legal/terms)\nand the [Acceptable Use Policy](https://touchmark.dev/legal/acceptable-use).\n",
+    "description": "\nValidate email addresses: syntax, DNS/MX, disposable and free-provider domains, role\naccounts and typo suggestions. Verify that a mailbox exists by asking its mail server.\nCheck a sending domain's DNS against the Gmail, Yahoo and Microsoft bulk-sender rules.\nLook up an IP address: country, network owner, hosting or cloud company and Tor exit.\nCheck a phone number against its country's numbering plan: format, country, line type\nand original carrier.\n\n## Authentication\nSend your API key as a bearer token: `Authorization: Bearer vld_live_…`. Create keys\nin the dashboard.\n\n## Credits\nOne balance pays for every endpoint. `POST /v1/email/validate` costs 1 credit;\n`POST /v1/email/validate/batch` costs 1 credit per address (up to 100);\n`POST /v1/email/verify` costs 5 credits, or 1 when the result is `unknown` or the\naddress is invalid before the mailbox check; `POST /v1/domain/sender-readiness` costs\n2 credits; `POST /v1/ip/lookup` costs 1 credit, and `POST /v1/ip/lookup/batch` 1 credit\nper address (up to 100); `POST /v1/phone/validate` costs 1 credit, and\n`POST /v1/phone/validate/batch` 1 credit per number (up to 100). Every paid response\ncarries the remaining balance in `X-Credits-Remaining`.\n\n## Rate limits\nResponses carry `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset`.\nA `429` response includes `Retry-After`.\n\n## Results and reasons\nEvery validation has one `result`. When several apply, the first in this list wins\n(`invalid` > `unknown` > `risky` > `valid`):\n\n- `invalid`: the address cannot receive mail. Its syntax is rejected, or its domain\n  does not exist, publishes a null MX or has no mail records.\n- `unknown`: DNS gave no definite answer (server failure, refusal or timeout). Try\n  again later.\n- `risky`: the domain accepts mail but belongs to a disposable-email provider.\n- `valid`: the domain accepts mail and no risk flags apply.\n\n`valid` from `validate` means the domain accepts mail and no risk flags apply. It does\n**not** mean the mailbox exists: `validate` never contacts the mail server, so\n`checks.mailbox.status` is `not_checked`.\n\n`reasons` lists every rule that matched:\n\n- `invalid_syntax`: the address fails the syntax policy. Quoted local parts, IP\n  literals and single-label domains are rejected even where the RFCs allow them.\n- `domain_not_found`: the domain does not exist (NXDOMAIN).\n- `null_mx`: the domain publishes a null MX record (RFC 7505), so it accepts no mail.\n- `no_mail_records`: the domain has neither an MX record nor an A or AAAA record.\n- `dns_error`: the DNS lookup failed (server failure, refusal or timeout). The result\n  is `unknown`, never `invalid`.\n- `implicit_mx`: the domain has no MX record, so mail goes to its A or AAAA record.\n  The domain still accepts mail.\n- `disposable`: the domain, or a parent domain, belongs to a disposable-email\n  provider. The result is `risky`.\n- `free_provider`: the domain is a free email provider such as gmail.com. It does not\n  change the result.\n- `role_account`: the local part names a role, such as `info` or `support`, rather\n  than a person (a `+tag` is ignored). It does not change the result.\n\nChanges within `/v1` are additive: new fields and new reason codes may appear.\nClients must ignore unknown fields and unknown reason codes.\n\n`datasets` gives the version of each domain list (`disposable`, `free_provider`) that\nproduced the flags. The values are opaque version identifiers: compare them for\nequality, but do not parse them.\n\n## Mailbox verification\n`POST /v1/email/verify` runs the `validate` checks and then asks the address's mail\nserver whether the mailbox exists. It needs the `email:verify` scope and a completed\npurchase (`403 tier_required` otherwise), and an account may submit 10 per second.\nThe mail server is never sent a message.\n\nWhen the answer is known at once (the address is invalid, the mailbox was checked\nrecently, or the check cannot run) the call returns `200` with `status: \"done\"` and\n`id: null`. Otherwise it returns `202` with an `id`, `status: \"queued\"`, the `validate`\nresult and `checks.mailbox.status` `pending`; 5 credits are charged, and 4 come back if\nthe check ends `unknown`. `GET /v1/email/verify/{id}` returns the check for free; with\n`?wait=N` (up to 10) it waits that many seconds for the check to finish. A server that\nasks to try again later is retried after 10 and 30 minutes. Results are kept for 7\ndays; once the check is done, `email`, `normalized` and `did_you_mean` are null, because\nthe address itself is not kept.\n\n`checks.mailbox.status` is `exists`, `not_exists`, `catch_all` (the domain accepts mail\nfor any address), `unknown`, `pending`, or `not_checked` (the `validate` checks already\ndecided: the address is invalid, or DNS gave no answer). `not_exists` makes the result\n`invalid` and adds the reason `mailbox_not_found`; `catch_all` makes it `risky` and adds\n`catch_all`. An `unknown` mailbox makes the result `unknown`, and its reason appears in\n`checks.mailbox.reason` and in `reasons`:\n\n- `greylisted`: the server kept asking us to try again later.\n- `connection_failed`: no mail server of the domain could be reached.\n- `no_ipv4_server`: the domain's mail servers have no public IPv4 address, and mailbox\n  checks use IPv4 only.\n- `probe_blocked`: the server refused the check itself.\n- `provider_unverifiable`: the provider accepts every address (Microsoft 365), or the\n  server cannot take this address, so no answer would be meaningful; or its mail server\n  offered TLS and then failed it, and we do not fall back to plaintext.\n- `capacity_exceeded`: today's mailbox-check capacity is used up.\n- `domain_limit`: this account checked 200 addresses at this domain today.\n- `smtp_unavailable`: mailbox checks are paused on our side.\n\n## Sender readiness\n`POST /v1/domain/sender-readiness` checks the DNS side of the bulk-sender rules: SPF\n(one record, at most 10 DNS lookups, not `+all`), DKIM (a key under a common selector\nor one you pass in `dkim_selectors`) and DMARC (`p` of `none`, `quarantine` or\n`reject`). It also reports MX, MTA-STS, TLS-RPT and BIMI records. `dns_ready` gives\n`pass`, `warn` or `fail` for Gmail, Yahoo and Microsoft, and `gaps` says what to fix.\nDNS cannot show complaint rates, one-click unsubscribe or DMARC alignment in practice,\nso `not_checked` lists them. When DNS lookups fail, the call returns\n`503 upstream_unavailable` and costs nothing. After 10 such answers in 10 minutes an\naccount gets `429 rate_limited` with `Retry-After`.\n\n## IP lookup\n`POST /v1/ip/lookup` takes one IPv4 or IPv6 address; `POST /v1/ip/lookup/batch` takes\nup to 100 and answers in input order. They need the `ip:lookup` scope. A value that is\nnot an address is `422 validation_error` for the whole call, and nothing is charged.\nEvery answer comes from datasets held on our servers; the address is not sent anywhere.\n\n- `country` and `continent` are a geolocation estimate at country level, from\n  [IP Geolocation by DB-IP](https://db-ip.com). If you display them, keep that credit\n  next to them.\n- `asn` is the autonomous system that announces the address (DB-IP).\n- `network` is `{\"type\": \"hosting\", \"provider\": …}` when the address belongs to the\n  autonomous system of a hosting or cloud company (for example `aws`, `gcp`, `ovh`,\n  `hetzner`), from our own list; `null` means it is not on that list, not that the\n  address is residential.\n- `tor_exit` says whether the address is a Tor exit (Tor Project list). It is `null`\n  for IPv6: the list holds IPv4 exits only.\n- `scope` is `global` for a public address. Private, shared (CGNAT), loopback,\n  link-local, multicast, unspecified and reserved addresses get their scope and no\n  other data, and still cost 1 credit.\n- `datasets` gives the version of each dataset read, or `null` for one not loaded yet.\n\n## Phone validation\n`POST /v1/phone/validate` takes one phone number; `POST /v1/phone/validate/batch` takes\nup to 100 and answers in input order. They need the `phone:validate` scope. Write\nnumbers in international form (`+44 20 7946 0000`), or pass `country` (an ISO 3166-1\nalpha-2 code) for numbers written without `+`. Any string is answered and costs 1\ncredit; a malformed request (an empty `phone`, a number longer than 64 characters, an unknown `country`)\nis `422 validation_error`, and nothing is charged. Every answer comes from Google's\nlibphonenumber numbering-plan data held on our servers; the number is not sent anywhere.\n\n- `valid` means the number fits its country's numbering plan. It does not mean the\n  number is assigned, in service or reachable. `reason` says why a number is not\n  valid: `not_a_number`, `no_country_code` (written without `+` and no `country`\n  given), `invalid_country_code`, `too_short`, `too_long`, `invalid_length` or\n  `not_in_plan`.\n- `type` is the line type from the numbering plan. The North American plan (the United\n  States, Canada and much of the Caribbean) does not separate mobile numbers, so its\n  numbers are `fixed_line_or_mobile`.\n- `original_carrier` is the network the number range was first allocated to. Numbers\n  move between networks, so it is not necessarily the current one. It is `null` for\n  most landlines and North American numbers.\n- `region` is the area of a landline range, such as a city. It describes the number\n  range, not where anyone is.\n- `country` is `null` for a number that is not valid and for non-geographic numbers\n  (such as `+800`).\n- `datasets` gives the version of the numbering-plan data used.\n\n## Errors\nErrors are RFC 9457 `application/problem+json` documents with a stable `code`.\nSee the [error reference](/docs/errors).\n\n## MCP server\nAI agents can call these checks as tools through the MCP server at `https://api.touchmark.dev/mcp`\n(Streamable HTTP). Send your API key as for any other call:\n`Authorization: Bearer vld_live_…`. Each tool calls the endpoint above it stands\nfor and costs the same credits, with the same scopes and limits: `validate_email`\n(1), `verify_email` (up to 5; waits up to about 25 seconds, then returns the\ncheck's `id`), `get_email_verification` (free), `check_sender_readiness` (2),\n`lookup_ip` (1), `validate_phone` (1) and `get_account` (free).\n\nClaude Code:\n`claude mcp add --transport http touchmark https://api.touchmark.dev/mcp --header \"Authorization: Bearer vld_live_…\"`\n\nCursor (`~/.cursor/mcp.json`):\n`{\"mcpServers\": {\"touchmark\": {\"url\": \"https://api.touchmark.dev/mcp\", \"headers\": {\"Authorization\": \"Bearer vld_live_…\"}}}}`\n\nVS Code (`.vscode/mcp.json`):\n`{\"servers\": {\"touchmark\": {\"type\": \"http\", \"url\": \"https://api.touchmark.dev/mcp\", \"headers\": {\"Authorization\": \"Bearer vld_live_…\"}}}}`\n\n## SDKs\nOfficial client libraries for TypeScript and Python, under the MIT licence:\n[github.com/marcin-marciszewski/touchmark-sdks](https://github.com/marcin-marciszewski/touchmark-sdks).\n\n- TypeScript: `npm install touchmark`, then\n  `const tm = new Touchmark({ apiKey: process.env.TOUCHMARK_API_KEY })` and\n  `await tm.email.validate({ email: \"jane@acme.com\" })`.\n- Python: `pip install touchmark`, then `tm = Touchmark()` (reads\n  `TOUCHMARK_API_KEY`) and `tm.email.validate(email=\"jane@acme.com\")`.\n\n## Terms\nUse of the API is subject to the [Terms of Service](https://touchmark.dev/legal/terms)\nand the [Acceptable Use Policy](https://touchmark.dev/legal/acceptable-use).\n",
     "version": "1"
   },
   "paths": {
@@ -54,53 +54,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -110,53 +64,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -166,53 +74,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -222,53 +84,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -315,53 +131,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -371,53 +141,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -427,53 +151,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -483,53 +161,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -539,53 +171,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -595,53 +181,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -651,53 +191,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -744,53 +238,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -800,53 +248,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -856,53 +258,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -912,53 +268,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -968,53 +278,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1024,53 +288,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1080,53 +298,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1183,53 +355,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1239,53 +365,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1295,53 +375,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1351,53 +385,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1407,53 +395,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1463,53 +405,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1519,53 +415,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1633,53 +483,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "description": "An RFC 9457 problem document: the body of every error response.",
-                  "properties": {
-                    "type": {
-                      "description": "Link to this code in the error reference.",
-                      "title": "Type",
-                      "type": "string"
-                    },
-                    "title": {
-                      "title": "Title",
-                      "type": "string"
-                    },
-                    "status": {
-                      "title": "Status",
-                      "type": "integer"
-                    },
-                    "detail": {
-                      "title": "Detail",
-                      "type": "string"
-                    },
-                    "code": {
-                      "description": "Stable code for this error; match on it.",
-                      "title": "Code",
-                      "type": "string"
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Quote it when you ask for help.",
-                      "title": "Request Id"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "type": "object"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1689,53 +493,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "description": "An RFC 9457 problem document: the body of every error response.",
-                  "properties": {
-                    "type": {
-                      "description": "Link to this code in the error reference.",
-                      "title": "Type",
-                      "type": "string"
-                    },
-                    "title": {
-                      "title": "Title",
-                      "type": "string"
-                    },
-                    "status": {
-                      "title": "Status",
-                      "type": "integer"
-                    },
-                    "detail": {
-                      "title": "Detail",
-                      "type": "string"
-                    },
-                    "code": {
-                      "description": "Stable code for this error; match on it.",
-                      "title": "Code",
-                      "type": "string"
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Quote it when you ask for help.",
-                      "title": "Request Id"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "type": "object"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1745,53 +503,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "description": "An RFC 9457 problem document: the body of every error response.",
-                  "properties": {
-                    "type": {
-                      "description": "Link to this code in the error reference.",
-                      "title": "Type",
-                      "type": "string"
-                    },
-                    "title": {
-                      "title": "Title",
-                      "type": "string"
-                    },
-                    "status": {
-                      "title": "Status",
-                      "type": "integer"
-                    },
-                    "detail": {
-                      "title": "Detail",
-                      "type": "string"
-                    },
-                    "code": {
-                      "description": "Stable code for this error; match on it.",
-                      "title": "Code",
-                      "type": "string"
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Quote it when you ask for help.",
-                      "title": "Request Id"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "type": "object"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1801,53 +513,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "description": "An RFC 9457 problem document: the body of every error response.",
-                  "properties": {
-                    "type": {
-                      "description": "Link to this code in the error reference.",
-                      "title": "Type",
-                      "type": "string"
-                    },
-                    "title": {
-                      "title": "Title",
-                      "type": "string"
-                    },
-                    "status": {
-                      "title": "Status",
-                      "type": "integer"
-                    },
-                    "detail": {
-                      "title": "Detail",
-                      "type": "string"
-                    },
-                    "code": {
-                      "description": "Stable code for this error; match on it.",
-                      "title": "Code",
-                      "type": "string"
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Quote it when you ask for help.",
-                      "title": "Request Id"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "type": "object"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1857,53 +523,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "description": "An RFC 9457 problem document: the body of every error response.",
-                  "properties": {
-                    "type": {
-                      "description": "Link to this code in the error reference.",
-                      "title": "Type",
-                      "type": "string"
-                    },
-                    "title": {
-                      "title": "Title",
-                      "type": "string"
-                    },
-                    "status": {
-                      "title": "Status",
-                      "type": "integer"
-                    },
-                    "detail": {
-                      "title": "Detail",
-                      "type": "string"
-                    },
-                    "code": {
-                      "description": "Stable code for this error; match on it.",
-                      "title": "Code",
-                      "type": "string"
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Quote it when you ask for help.",
-                      "title": "Request Id"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "type": "object"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1913,53 +533,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "description": "An RFC 9457 problem document: the body of every error response.",
-                  "properties": {
-                    "type": {
-                      "description": "Link to this code in the error reference.",
-                      "title": "Type",
-                      "type": "string"
-                    },
-                    "title": {
-                      "title": "Title",
-                      "type": "string"
-                    },
-                    "status": {
-                      "title": "Status",
-                      "type": "integer"
-                    },
-                    "detail": {
-                      "title": "Detail",
-                      "type": "string"
-                    },
-                    "code": {
-                      "description": "Stable code for this error; match on it.",
-                      "title": "Code",
-                      "type": "string"
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Quote it when you ask for help.",
-                      "title": "Request Id"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "type": "object"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2001,53 +575,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2057,53 +585,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2113,53 +595,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2169,53 +605,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2225,53 +615,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2281,53 +625,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2337,53 +635,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2430,53 +682,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2486,53 +692,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2542,53 +702,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2598,53 +712,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2654,53 +722,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2710,53 +732,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2766,53 +742,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2859,53 +789,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2915,53 +799,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2971,53 +809,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3027,53 +819,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3083,53 +829,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3139,53 +839,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3195,53 +849,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3288,53 +896,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3344,53 +906,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3400,53 +916,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3456,53 +926,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3512,53 +936,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3568,53 +946,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3624,53 +956,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3717,53 +1003,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3773,53 +1013,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3829,53 +1023,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3885,53 +1033,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3941,53 +1043,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3997,53 +1053,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -4053,53 +1063,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "title": "Type",
-                      "description": "Link to this code in the error reference."
-                    },
-                    "title": {
-                      "type": "string",
-                      "title": "Title"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "title": "Status"
-                    },
-                    "detail": {
-                      "type": "string",
-                      "title": "Detail"
-                    },
-                    "code": {
-                      "type": "string",
-                      "title": "Code",
-                      "description": "Stable code for this error; match on it."
-                    },
-                    "request_id": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Request Id",
-                      "description": "Quote it when you ask for help."
-                    }
-                  },
-                  "type": "object",
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "detail",
-                    "code",
-                    "request_id"
-                  ],
-                  "title": "Problem",
-                  "description": "An RFC 9457 problem document: the body of every error response."
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -5820,6 +2784,55 @@
           "request_id"
         ],
         "title": "VerifyResponse"
+      },
+      "Problem": {
+        "description": "An RFC 9457 problem document: the body of every error response.",
+        "properties": {
+          "type": {
+            "description": "Link to this code in the error reference.",
+            "title": "Type",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "code": {
+            "description": "Stable code for this error; match on it.",
+            "title": "Code",
+            "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Quote it when you ask for help.",
+            "title": "Request Id"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code",
+          "request_id"
+        ],
+        "title": "Problem",
+        "type": "object"
       }
     },
     "securitySchemes": {

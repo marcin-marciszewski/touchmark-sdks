@@ -22,14 +22,11 @@ from .email_validation_datasets import EmailValidationDatasets
 from .email_validation_result import EmailValidationResult
 from .gap import Gap
 from .gap_severity import GapSeverity
-from .get_verification_problem import GetVerificationProblem
 from .health_response_health import HealthResponseHealth
 from .ip_lookup import IpLookup
 from .ip_lookup_datasets import IpLookupDatasets
 from .ip_lookup_scope import IpLookupScope
 from .ip_lookup_version import IpLookupVersion
-from .lookup_ip_batch_problem import LookupIpBatchProblem
-from .lookup_ip_problem import LookupIpProblem
 from .lookup_request import LookupRequest
 from .lookup_response import LookupResponse
 from .lookup_response_datasets import LookupResponseDatasets
@@ -51,22 +48,16 @@ from .phone_validation_datasets import PhoneValidationDatasets
 from .phone_validation_reason_type_0 import PhoneValidationReasonType0
 from .phone_validation_type_type_0 import PhoneValidationTypeType0
 from .presence_check import PresenceCheck
-from .read_account_problem import ReadAccountProblem
+from .problem import Problem
 from .readiness_checks import ReadinessChecks
 from .record_presence import RecordPresence
-from .sender_readiness_problem import SenderReadinessProblem
 from .sender_readiness_request import SenderReadinessRequest
 from .sender_readiness_response import SenderReadinessResponse
 from .spf_check import SpfCheck
-from .validate_email_batch_problem import ValidateEmailBatchProblem
-from .validate_email_problem import ValidateEmailProblem
-from .validate_phone_batch_problem import ValidatePhoneBatchProblem
-from .validate_phone_problem import ValidatePhoneProblem
 from .validate_request import ValidateRequest
 from .validate_response import ValidateResponse
 from .validate_response_datasets import ValidateResponseDatasets
 from .validate_response_result import ValidateResponseResult
-from .verify_email_problem import VerifyEmailProblem
 from .verify_response import VerifyResponse
 from .verify_response_datasets import VerifyResponseDatasets
 from .verify_response_result import VerifyResponseResult
@@ -95,14 +86,11 @@ __all__ = (
     "EmailValidationResult",
     "Gap",
     "GapSeverity",
-    "GetVerificationProblem",
     "HealthResponseHealth",
     "IpLookup",
     "IpLookupDatasets",
     "IpLookupScope",
     "IpLookupVersion",
-    "LookupIpBatchProblem",
-    "LookupIpProblem",
     "LookupRequest",
     "LookupResponse",
     "LookupResponseDatasets",
@@ -124,22 +112,16 @@ __all__ = (
     "PhoneValidationReasonType0",
     "PhoneValidationTypeType0",
     "PresenceCheck",
-    "ReadAccountProblem",
+    "Problem",
     "ReadinessChecks",
     "RecordPresence",
-    "SenderReadinessProblem",
     "SenderReadinessRequest",
     "SenderReadinessResponse",
     "SpfCheck",
-    "ValidateEmailBatchProblem",
-    "ValidateEmailProblem",
-    "ValidatePhoneBatchProblem",
-    "ValidatePhoneProblem",
     "ValidateRequest",
     "ValidateResponse",
     "ValidateResponseDatasets",
     "ValidateResponseResult",
-    "VerifyEmailProblem",
     "VerifyResponse",
     "VerifyResponseDatasets",
     "VerifyResponseResult",

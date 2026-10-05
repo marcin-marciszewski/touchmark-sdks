@@ -843,6 +843,44 @@ export type VerifyResponse = {
     request_id: string;
 };
 
+/**
+ * Problem
+ *
+ * An RFC 9457 problem document: the body of every error response.
+ */
+export type Problem = {
+    /**
+     * Type
+     *
+     * Link to this code in the error reference.
+     */
+    type: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Status
+     */
+    status: number;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Code
+     *
+     * Stable code for this error; match on it.
+     */
+    code: string;
+    /**
+     * Request Id
+     *
+     * Quote it when you ask for help.
+     */
+    request_id: string | null;
+};
+
 export type HealthData = {
     body?: never;
     path?: never;
@@ -872,153 +910,21 @@ export type ReadAccountData = {
 
 export type ReadAccountErrors = {
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `invalid_api_key`: Invalid API key; `key_revoked`: API key revoked
      */
-    401: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    401: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `account_suspended`: Account suspended
      */
-    403: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    403: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `rate_limited`: Rate limit exceeded
      */
-    429: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    429: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `upstream_unavailable`: Service temporarily unavailable
      */
-    503: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    503: Problem;
 };
 
 export type ReadAccountError = ReadAccountErrors[keyof ReadAccountErrors];
@@ -1041,264 +947,33 @@ export type ValidateEmailData = {
 
 export type ValidateEmailErrors = {
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `invalid_api_key`: Invalid API key; `key_revoked`: API key revoked
      */
-    401: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    401: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `insufficient_credits`: Insufficient credits
      */
-    402: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    402: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `account_suspended`: Account suspended; `scope_missing`: API key is missing a required scope
      */
-    403: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    403: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `payload_too_large`: Request body too large
      */
-    413: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    413: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `validation_error`: Request validation failed
      */
-    422: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    422: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `rate_limited`: Rate limit exceeded; `daily_cap_reached`: Daily call cap reached
      */
-    429: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    429: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `upstream_unavailable`: Service temporarily unavailable
      */
-    503: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    503: Problem;
 };
 
 export type ValidateEmailError = ValidateEmailErrors[keyof ValidateEmailErrors];
@@ -1321,264 +996,33 @@ export type ValidateEmailBatchData = {
 
 export type ValidateEmailBatchErrors = {
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `invalid_api_key`: Invalid API key; `key_revoked`: API key revoked
      */
-    401: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    401: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `insufficient_credits`: Insufficient credits
      */
-    402: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    402: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `account_suspended`: Account suspended; `scope_missing`: API key is missing a required scope
      */
-    403: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    403: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `payload_too_large`: Request body too large
      */
-    413: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    413: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `validation_error`: Request validation failed
      */
-    422: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    422: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `rate_limited`: Rate limit exceeded; `daily_cap_reached`: Daily call cap reached
      */
-    429: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    429: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `upstream_unavailable`: Service temporarily unavailable
      */
-    503: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    503: Problem;
 };
 
 export type ValidateEmailBatchError = ValidateEmailBatchErrors[keyof ValidateEmailBatchErrors];
@@ -1601,264 +1045,33 @@ export type VerifyEmailData = {
 
 export type VerifyEmailErrors = {
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `invalid_api_key`: Invalid API key; `key_revoked`: API key revoked
      */
-    401: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    401: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `insufficient_credits`: Insufficient credits
      */
-    402: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    402: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `account_suspended`: Account suspended; `scope_missing`: API key is missing a required scope; `tier_required`: This feature requires a purchase
      */
-    403: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    403: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `payload_too_large`: Request body too large
      */
-    413: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    413: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `validation_error`: Request validation failed
      */
-    422: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    422: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `rate_limited`: Rate limit exceeded; `daily_cap_reached`: Daily call cap reached
      */
-    429: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    429: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `upstream_unavailable`: Service temporarily unavailable
      */
-    503: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    503: Problem;
 };
 
 export type VerifyEmailError = VerifyEmailErrors[keyof VerifyEmailErrors];
@@ -1897,227 +1110,29 @@ export type GetVerificationData = {
 
 export type GetVerificationErrors = {
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `invalid_api_key`: Invalid API key; `key_revoked`: API key revoked
      */
-    401: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    401: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `account_suspended`: Account suspended; `scope_missing`: API key is missing a required scope
      */
-    403: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    403: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `not_found`: Not found
      */
-    404: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    404: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `validation_error`: Request validation failed
      */
-    422: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    422: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `rate_limited`: Rate limit exceeded
      */
-    429: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    429: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `upstream_unavailable`: Service temporarily unavailable
      */
-    503: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    503: Problem;
 };
 
 export type GetVerificationError = GetVerificationErrors[keyof GetVerificationErrors];
@@ -2140,264 +1155,33 @@ export type SenderReadinessData = {
 
 export type SenderReadinessErrors = {
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `invalid_api_key`: Invalid API key; `key_revoked`: API key revoked
      */
-    401: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    401: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `insufficient_credits`: Insufficient credits
      */
-    402: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    402: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `account_suspended`: Account suspended; `scope_missing`: API key is missing a required scope
      */
-    403: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    403: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `payload_too_large`: Request body too large
      */
-    413: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    413: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `validation_error`: Request validation failed
      */
-    422: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    422: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `rate_limited`: Rate limit exceeded; `daily_cap_reached`: Daily call cap reached
      */
-    429: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    429: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `upstream_unavailable`: Service temporarily unavailable
      */
-    503: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    503: Problem;
 };
 
 export type SenderReadinessError = SenderReadinessErrors[keyof SenderReadinessErrors];
@@ -2420,264 +1204,33 @@ export type LookupIpData = {
 
 export type LookupIpErrors = {
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `invalid_api_key`: Invalid API key; `key_revoked`: API key revoked
      */
-    401: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    401: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `insufficient_credits`: Insufficient credits
      */
-    402: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    402: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `account_suspended`: Account suspended; `scope_missing`: API key is missing a required scope
      */
-    403: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    403: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `payload_too_large`: Request body too large
      */
-    413: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    413: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `validation_error`: Request validation failed
      */
-    422: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    422: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `rate_limited`: Rate limit exceeded; `daily_cap_reached`: Daily call cap reached
      */
-    429: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    429: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `upstream_unavailable`: Service temporarily unavailable
      */
-    503: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    503: Problem;
 };
 
 export type LookupIpError = LookupIpErrors[keyof LookupIpErrors];
@@ -2700,264 +1253,33 @@ export type LookupIpBatchData = {
 
 export type LookupIpBatchErrors = {
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `invalid_api_key`: Invalid API key; `key_revoked`: API key revoked
      */
-    401: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    401: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `insufficient_credits`: Insufficient credits
      */
-    402: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    402: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `account_suspended`: Account suspended; `scope_missing`: API key is missing a required scope
      */
-    403: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    403: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `payload_too_large`: Request body too large
      */
-    413: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    413: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `validation_error`: Request validation failed
      */
-    422: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    422: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `rate_limited`: Rate limit exceeded; `daily_cap_reached`: Daily call cap reached
      */
-    429: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    429: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `upstream_unavailable`: Service temporarily unavailable
      */
-    503: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    503: Problem;
 };
 
 export type LookupIpBatchError = LookupIpBatchErrors[keyof LookupIpBatchErrors];
@@ -2980,264 +1302,33 @@ export type ValidatePhoneData = {
 
 export type ValidatePhoneErrors = {
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `invalid_api_key`: Invalid API key; `key_revoked`: API key revoked
      */
-    401: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    401: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `insufficient_credits`: Insufficient credits
      */
-    402: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    402: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `account_suspended`: Account suspended; `scope_missing`: API key is missing a required scope
      */
-    403: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    403: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `payload_too_large`: Request body too large
      */
-    413: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    413: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `validation_error`: Request validation failed
      */
-    422: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    422: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `rate_limited`: Rate limit exceeded; `daily_cap_reached`: Daily call cap reached
      */
-    429: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    429: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `upstream_unavailable`: Service temporarily unavailable
      */
-    503: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    503: Problem;
 };
 
 export type ValidatePhoneError = ValidatePhoneErrors[keyof ValidatePhoneErrors];
@@ -3260,264 +1351,33 @@ export type ValidatePhoneBatchData = {
 
 export type ValidatePhoneBatchErrors = {
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `invalid_api_key`: Invalid API key; `key_revoked`: API key revoked
      */
-    401: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    401: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `insufficient_credits`: Insufficient credits
      */
-    402: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    402: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `account_suspended`: Account suspended; `scope_missing`: API key is missing a required scope
      */
-    403: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    403: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `payload_too_large`: Request body too large
      */
-    413: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    413: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `validation_error`: Request validation failed
      */
-    422: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    422: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `rate_limited`: Rate limit exceeded; `daily_cap_reached`: Daily call cap reached
      */
-    429: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    429: Problem;
     /**
-     * Problem
-     *
-     * An RFC 9457 problem document: the body of every error response.
+     * `upstream_unavailable`: Service temporarily unavailable
      */
-    503: {
-        /**
-         * Type
-         *
-         * Link to this code in the error reference.
-         */
-        type: string;
-        /**
-         * Title
-         */
-        title: string;
-        /**
-         * Status
-         */
-        status: number;
-        /**
-         * Detail
-         */
-        detail: string;
-        /**
-         * Code
-         *
-         * Stable code for this error; match on it.
-         */
-        code: string;
-        /**
-         * Request Id
-         *
-         * Quote it when you ask for help.
-         */
-        request_id: string | null;
-    };
+    503: Problem;
 };
 
 export type ValidatePhoneBatchError = ValidatePhoneBatchErrors[keyof ValidatePhoneBatchErrors];
