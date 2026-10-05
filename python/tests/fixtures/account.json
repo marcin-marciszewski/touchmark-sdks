@@ -1,0 +1,15 @@
+{
+  "credit_balance": 50,
+  "tier": 1,
+  "key": {
+    "id": "5c91b463-269f-4685-bdf3-8fc2fd4532ae",
+    "name": "test",
+    "scopes": [
+      "domain:readiness",
+      "email:validate",
+      "email:verify",
+      "ip:lookup",
+      "phone:validate"
+    ]
+  }
+}

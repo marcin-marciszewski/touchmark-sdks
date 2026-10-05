@@ -1,0 +1,8 @@
+{
+  "type": "https://api.localhost/docs/errors#invalid_api_key",
+  "title": "Invalid API key",
+  "status": 401,
+  "detail": "Send a valid key as 'Authorization: Bearer vld_live_...'.",
+  "code": "invalid_api_key",
+  "request_id": "req_fixture"
+}

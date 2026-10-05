@@ -1,0 +1,17 @@
+{
+  "ip": "203.0.113.7",
+  "version": 4,
+  "scope": "private",
+  "country": null,
+  "continent": null,
+  "asn": null,
+  "network": null,
+  "tor_exit": null,
+  "datasets": {
+    "dbip_country": null,
+    "dbip_asn": null,
+    "tor_exit": "seed"
+  },
+  "credits_charged": 1,
+  "request_id": "req_fixture"
+}

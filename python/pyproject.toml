@@ -1,0 +1,53 @@
+[project]
+name = "touchmark"
+version = "0.1.0"
+description = "Official Python client for the Touchmark API: email, IP and phone validation."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Icomi" }]
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27,<1",
+    "attrs>=23.2",
+    "python-dateutil>=2.8",
+]
+keywords = ["touchmark", "email validation", "ip lookup", "phone validation", "api"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Typing :: Typed",
+    "Intended Audience :: Developers",
+]
+
+[project.urls]
+Homepage = "https://api.touchmark.dev/docs"
+Repository = "https://github.com/marcin-marciszewski/touchmark-sdks"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+    "respx>=0.22",
+    "ruff>=0.13",
+    "mypy>=1.18",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["touchmark"]
+
+[tool.ruff]
+extend-exclude = ["touchmark/_gen"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+strict = true
+packages = ["touchmark"]
+
+[[tool.mypy.overrides]]
+module = "touchmark._gen.*"
+ignore_errors = true

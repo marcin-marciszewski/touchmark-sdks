@@ -1,0 +1,34 @@
+{
+  "id": null,
+  "status": "done",
+  "email": "user@example.com",
+  "normalized": "user@example.com",
+  "result": "invalid",
+  "reasons": [
+    "null_mx"
+  ],
+  "did_you_mean": null,
+  "checks": {
+    "syntax": true,
+    "domain": {
+      "mx_found": false,
+      "implicit_mx": false,
+      "null_mx": true,
+      "mx_vendor": null,
+      "mx_hosts": []
+    },
+    "disposable": false,
+    "free_provider": false,
+    "role_account": false,
+    "mailbox": {
+      "status": "not_checked",
+      "reason": null
+    }
+  },
+  "datasets": {
+    "disposable": "seed",
+    "free_provider": "seed"
+  },
+  "credits_charged": 1,
+  "request_id": "req_fixture"
+}

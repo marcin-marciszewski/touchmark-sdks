@@ -1,0 +1,28 @@
+{
+  "results": [
+    {
+      "valid": true,
+      "reason": null,
+      "e164": "+442079460000",
+      "international": "+44 20 7946 0000",
+      "national": "020 7946 0000",
+      "extension": null,
+      "country": {
+        "code": "GB",
+        "name": "United Kingdom"
+      },
+      "calling_code": 44,
+      "type": "fixed_line",
+      "original_carrier": null,
+      "region": "London",
+      "time_zones": [
+        "Europe/London"
+      ],
+      "datasets": {
+        "libphonenumber": "9.0.40"
+      }
+    }
+  ],
+  "credits_charged": 1,
+  "request_id": "req_fixture"
+}

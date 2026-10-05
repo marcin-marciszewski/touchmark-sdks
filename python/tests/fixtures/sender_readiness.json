@@ -1,0 +1,73 @@
+{
+  "domain": "example.com",
+  "dns_ready": {
+    "gmail": "warn",
+    "yahoo": "warn",
+    "microsoft": "warn"
+  },
+  "checks": {
+    "spf": {
+      "status": "pass",
+      "record": "v=spf1 -all",
+      "dns_lookups": 0,
+      "warnings": [],
+      "error": null
+    },
+    "dkim": {
+      "status": "warn",
+      "selectors_found": [],
+      "selectors_tried": [
+        "google",
+        "selector1",
+        "selector2",
+        "k1",
+        "s1",
+        "s2",
+        "default",
+        "mandrill",
+        "dkim",
+        "mail"
+      ]
+    },
+    "dmarc": {
+      "status": "pass",
+      "record": "v=DMARC1;p=reject;sp=reject;adkim=s;aspf=s",
+      "location": "example.com",
+      "policy": "reject",
+      "warnings": [
+        "rua tag (destination for aggregate reports) not found."
+      ],
+      "error": null
+    },
+    "mx": {
+      "status": "absent",
+      "records": []
+    },
+    "mta_sts": {
+      "status": "absent",
+      "records": []
+    },
+    "tls_rpt": {
+      "status": "absent",
+      "records": []
+    },
+    "bimi": {
+      "status": "absent",
+      "records": []
+    }
+  },
+  "gaps": [
+    {
+      "code": "dkim_not_found",
+      "severity": "warning",
+      "fix": "No DKIM key was found under the common selectors. If you sign with DKIM, pass your selector in dkim_selectors; otherwise turn on DKIM signing at your email provider."
+    }
+  ],
+  "not_checked": [
+    "complaint_rate",
+    "one_click_unsubscribe",
+    "dmarc_alignment_in_practice"
+  ],
+  "credits_charged": 2,
+  "request_id": "req_fixture"
+}
