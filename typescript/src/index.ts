@@ -65,6 +65,18 @@ function retryAfterSeconds(response: Response): number | null {
   return Number.isFinite(seconds) && seconds >= 0 ? seconds : null
 }
 
+// The API's mailbox-check ids are UUIDs; anything else could reach another path.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function verificationPath(verificationId: string): string {
+  if (!UUID.test(verificationId)) {
+    throw new TypeError(
+      `verificationId must be a UUID, not ${JSON.stringify(verificationId)}`,
+    )
+  }
+  return `/v1/email/verify/${verificationId}`
+}
+
 function retryable(status: number, code: string): boolean {
   return status === 429 || (status === 503 && code === "upstream_unavailable")
 }
@@ -110,13 +122,13 @@ export class Touchmark {
     verify: (body: T.VerifyEmailData["body"]) =>
       this.#request<T.VerifyEmailResponse>("POST", "/v1/email/verify", body),
     /** A mailbox check, waiting up to `wait` seconds (at most 10) for it to finish. Free. */
-    getVerification: (
+    getVerification: async (
       verificationId: string,
       options: { wait?: number } = {},
     ) =>
       this.#request<T.GetVerificationResponses[200]>(
         "GET",
-        `/v1/email/verify/${encodeURIComponent(verificationId)}`,
+        verificationPath(verificationId),
         undefined,
         options.wait === undefined ? undefined : { wait: options.wait },
       ),
@@ -220,7 +232,9 @@ export class Touchmark {
 async function toError(response: Response): Promise<TouchmarkError> {
   let problem: { code?: unknown; detail?: unknown } = {}
   try {
-    problem = (await response.json()) as typeof problem
+    const body: unknown = await response.json()
+    // JSON null or an array is not a problem document either.
+    if (body !== null && typeof body === "object") problem = body
   } catch {
     // Not a problem document (a proxy's error page, for example).
   }

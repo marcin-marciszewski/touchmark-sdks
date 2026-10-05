@@ -7,12 +7,14 @@ once for the asynchronous client.
 
 from __future__ import annotations
 
+import functools
+import math
 import os
 import time
+import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
-from urllib.parse import quote
 
 import anyio
 import httpx
@@ -59,6 +61,18 @@ class TouchmarkError(Exception):
         self.request_id = request_id
         self.retry_after = retry_after
 
+    def __reduce__(self) -> tuple[Any, tuple[()]]:
+        # The keyword-only __init__ would otherwise break pickling (multiprocessing).
+        rebuild = functools.partial(
+            type(self),
+            status=self.status,
+            code=self.code,
+            detail=self.detail,
+            request_id=self.request_id,
+            retry_after=self.retry_after,
+        )
+        return rebuild, ()
+
 
 @dataclass(frozen=True)
 class _Call(Generic[R]):
@@ -94,9 +108,11 @@ def _error(response: httpx.Response) -> TouchmarkError:
     retry_after: float | None = None
     if (value := response.headers.get("retry-after")) is not None:
         try:
-            retry_after = max(float(value), 0.0)
+            seconds = float(value)
         except ValueError:
-            retry_after = None
+            seconds = math.nan
+        # NaN, infinity or a negative value counts as no header.
+        retry_after = seconds if math.isfinite(seconds) and seconds >= 0 else None
     return TouchmarkError(
         status=response.status_code,
         code=code if isinstance(code, str) else f"http_{response.status_code}",
@@ -118,7 +134,14 @@ def _delay(error: TouchmarkError, attempt: int) -> float:
 
 
 def _verification_path(verification_id: str) -> str:
-    return f"/v1/email/verify/{quote(str(verification_id), safe='')}"
+    """The API's mailbox-check ids are UUIDs; anything else could reach another path."""
+    try:
+        canonical = uuid.UUID(str(verification_id))
+    except ValueError:
+        raise ValueError(
+            f"verification_id must be a UUID, not {verification_id!r}"
+        ) from None
+    return f"/v1/email/verify/{canonical}"
 
 
 # The calls, shared by both clients.
@@ -210,9 +233,11 @@ class Touchmark:
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         http_client: httpx.Client | None = None,
     ) -> None:
+        self._headers = _headers(_api_key(api_key))
+        # A client you pass in stays yours to close.
+        self._owns_http = http_client is None
         self._http = http_client or httpx.Client(timeout=timeout)
         self._base_url = base_url.rstrip("/")
-        self._headers = _headers(_api_key(api_key))
         self._max_retries = max_retries
         self.email = _Email(self)
         self.domain = _Domain(self)
@@ -221,7 +246,8 @@ class Touchmark:
         self.account = _Account(self)
 
     def close(self) -> None:
-        self._http.close()
+        if self._owns_http:
+            self._http.close()
 
     def __enter__(self) -> Touchmark:
         return self
@@ -264,9 +290,11 @@ class AsyncTouchmark:
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
+        self._headers = _headers(_api_key(api_key))
+        # A client you pass in stays yours to close.
+        self._owns_http = http_client is None
         self._http = http_client or httpx.AsyncClient(timeout=timeout)
         self._base_url = base_url.rstrip("/")
-        self._headers = _headers(_api_key(api_key))
         self._max_retries = max_retries
         self.email = _AsyncEmail(self)
         self.domain = _AsyncDomain(self)
@@ -275,7 +303,8 @@ class AsyncTouchmark:
         self.account = _AsyncAccount(self)
 
     async def aclose(self) -> None:
-        await self._http.aclose()
+        if self._owns_http:
+            await self._http.aclose()
 
     async def __aenter__(self) -> AsyncTouchmark:
         return self

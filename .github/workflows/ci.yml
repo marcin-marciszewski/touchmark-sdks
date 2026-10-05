@@ -24,7 +24,11 @@ jobs:
           package-manager-cache: false
       - run: npm ci
       - name: Generated types match the OpenAPI snapshot
-        run: npm run generate && git diff --exit-code -- src/gen
+        # git status also fails on a new file the generator adds.
+        run: |
+          npm run generate
+          git diff --exit-code -- src/gen
+          test -z "$(git status --porcelain -- src/gen)"
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
@@ -49,6 +53,7 @@ jobs:
         run: |
           cd .. && bash scripts/generate.sh python
           git diff --exit-code -- python/touchmark/_gen
+          test -z "$(git status --porcelain -- python/touchmark/_gen)"
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy

@@ -1,11 +1,15 @@
 import json
+import pickle
+import tomllib
 import uuid
+from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 import respx
 
+import touchmark
 from touchmark import DEFAULT_BASE_URL, AsyncTouchmark, Touchmark, TouchmarkError
 from touchmark.models import (
     AccountResponse,
@@ -160,11 +164,23 @@ def test_get_verification_passes_the_id_and_wait() -> None:
     assert route.calls.last.request.url.params["wait"] == "5"
 
 
-def test_a_verification_id_cannot_leave_its_path() -> None:
-    with respx.mock(base_url=API) as api:
-        route = api.get("/v1/email/verify/..%2F..%2Fhealth").respond(json=queued("x"))
-        Touchmark("k").email.get_verification("../../health")
-    assert route.called
+@pytest.mark.parametrize("bad", ["", ".", "..", "../../health", "a/b", "v1"])
+def test_a_verification_id_that_is_not_a_uuid_is_refused(bad: str) -> None:
+    # respx refuses any request no route matches, so nothing may be sent.
+    with respx.mock(base_url=API):
+        tm = Touchmark("k")
+        with pytest.raises(ValueError, match="UUID"):
+            tm.email.get_verification(bad)
+        with pytest.raises(ValueError, match="UUID"):
+            tm.email.wait_for_verification(bad)
+
+
+@pytest.mark.anyio
+async def test_the_async_client_refuses_an_id_that_is_not_a_uuid() -> None:
+    with respx.mock(base_url=API):
+        async with AsyncTouchmark("k") as tm:
+            with pytest.raises(ValueError, match="UUID"):
+                await tm.email.get_verification("..")
 
 
 # Errors and retries
@@ -228,6 +244,48 @@ def test_a_503_without_retry_after_backs_off(sleeps: list[float]) -> None:
         )
         Touchmark("k").email.validate("user@example.com")
     assert sleeps == [1]
+
+
+def test_a_second_503_waits_two_seconds(sleeps: list[float]) -> None:
+    with respx.mock(base_url=API) as api:
+        api.post("/v1/email/validate").mock(
+            side_effect=[
+                problem(503, "upstream_unavailable"),
+                problem(503, "upstream_unavailable"),
+                httpx.Response(200, json=fixture("validate_email")),
+            ]
+        )
+        Touchmark("k").email.validate("user@example.com")
+    assert sleeps == [1, 2]
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-5"])
+def test_an_unusable_retry_after_counts_as_none(
+    value: str, sleeps: list[float]
+) -> None:
+    with respx.mock(base_url=API) as api:
+        api.get("/v1/account").mock(
+            side_effect=[
+                problem(429, "rate_limited", **{"retry-after": value}),
+                httpx.Response(200, json=fixture("account")),
+            ]
+        )
+        Touchmark("k").account.get()
+    assert sleeps == [1]
+
+
+def test_touchmark_error_survives_pickling() -> None:
+    error = TouchmarkError(
+        status=429,
+        code="rate_limited",
+        detail="slow down",
+        request_id="req_123",
+        retry_after=3.0,
+    )
+    copy = pickle.loads(pickle.dumps(error))
+    fields = (copy.status, copy.code, copy.detail, copy.request_id, copy.retry_after)
+    assert fields == (429, "rate_limited", "slow down", "req_123", 3.0)
+    assert str(copy) == str(error)
 
 
 def test_a_long_retry_after_is_capped(sleeps: list[float]) -> None:
@@ -362,3 +420,55 @@ async def test_each_async_method_sends_its_request(
             result = await call(tm)
     assert json.loads(route.calls.last.request.content) == body
     assert result.to_dict() == fixture(answer)
+
+
+# The client's own HTTP connection pool
+
+
+def test_a_caller_owned_http_client_is_left_open() -> None:
+    own = httpx.Client()
+    with Touchmark("k", http_client=own):
+        pass
+    assert not own.is_closed
+    own.close()
+
+
+def test_the_clients_own_http_client_is_closed() -> None:
+    tm = Touchmark("k")
+    tm.close()
+    assert tm._http.is_closed
+
+
+@pytest.mark.anyio
+async def test_a_caller_owned_async_http_client_is_left_open() -> None:
+    own = httpx.AsyncClient()
+    async with AsyncTouchmark("k", http_client=own):
+        pass
+    assert not own.is_closed
+    await own.aclose()
+
+
+def test_a_missing_key_builds_no_http_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    built: list[object] = []
+    monkeypatch.setattr(
+        "touchmark._client.httpx.Client", lambda **kwargs: built.append(kwargs)
+    )
+    with pytest.raises(ValueError):
+        Touchmark()
+    assert built == []
+
+
+@pytest.mark.anyio
+async def test_the_async_client_reads_the_account() -> None:
+    with respx.mock(base_url=API) as api:
+        api.get("/v1/account").respond(json=fixture("account"))
+        async with AsyncTouchmark("k") as tm:
+            answer = await tm.account.get()
+    assert isinstance(answer, AccountResponse)
+
+
+def test_the_version_is_the_packages() -> None:
+    pyproject = tomllib.loads(
+        (Path(__file__).parents[1] / "pyproject.toml").read_text()
+    )
+    assert touchmark.__version__ == pyproject["project"]["version"]

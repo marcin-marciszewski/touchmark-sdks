@@ -39,6 +39,7 @@ Only the owner publishes. Agents prepare releases but never push, tag or publish
    git tag ts-v0.1.1 && git push origin ts-v0.1.1   # TypeScript
    git tag py-v0.1.0 && git push origin py-v0.1.0   # Python (its first release goes this way)
    ```
+   Never push `ts-v0.1.0`: you published 0.1.0 to npm by hand, so its release run would fail at `npm publish` (the version exists). The first TypeScript tag is `ts-v0.1.1`.
 3. Approve the run in the environment if you added yourself as a reviewer. Expected: the workflow ends green, and `npm view touchmark version` or `pip index versions touchmark` shows the new version. npm shows a "Provenance" badge on releases published this way.
 
 ## After an API change

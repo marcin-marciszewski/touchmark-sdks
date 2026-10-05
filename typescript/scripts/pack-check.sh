@@ -3,9 +3,11 @@
 # imports at runtime and type-checks under Node's module resolution.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+package_dir=$PWD
 tarball=$(npm pack --silent | tail -1)
 work=$(mktemp -d)
-trap 'rm -rf "$work"; rm -f "$tarball"' EXIT
+# By its full path: the script works in "$work" when the trap runs.
+trap 'rm -rf "$work"; rm -f "$package_dir/$tarball"' EXIT
 cp "$tarball" "$work/"
 cd "$work"
 npm init -y >/dev/null
@@ -17,9 +19,9 @@ if (typeof tm.email.validate !== "function" || typeof TouchmarkError !== "functi
 console.log("runtime import ok")
 '
 cat > check.mts <<'TS'
-import { Touchmark, type EmailValidation } from "touchmark"
+import { Touchmark, type ValidateResponse } from "touchmark"
 const tm = new Touchmark({ apiKey: "vld_live_check" })
-export const answer: Promise<EmailValidation> = tm.email.validate({ email: "a@b.co" })
+export const answer: Promise<ValidateResponse> = tm.email.validate({ email: "a@b.co" })
 TS
 npx tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2022 check.mts
 echo "types ok"

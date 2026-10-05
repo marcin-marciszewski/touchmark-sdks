@@ -9,6 +9,8 @@ authors = [{ name = "Icomi" }]
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27,<1",
+    # Imported by the asynchronous client; httpx depends on it too.
+    "anyio>=4",
     "attrs>=23.2",
     "python-dateutil>=2.8",
 ]

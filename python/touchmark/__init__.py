@@ -1,5 +1,7 @@
 """Official Python client for the Touchmark API."""
 
+from importlib.metadata import version
+
 from . import models
 from ._client import (
     DEFAULT_BASE_URL,
@@ -15,4 +17,4 @@ __all__ = [
     "TouchmarkError",
     "models",
 ]
-__version__ = "0.1.0"
+__version__ = version("touchmark")

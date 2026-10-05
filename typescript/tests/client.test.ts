@@ -4,6 +4,8 @@ import { DEFAULT_BASE_URL, Touchmark, TouchmarkError } from "../src/index.js"
 
 type Call = { url: URL; init: RequestInit }
 
+const ID = "6f1c2c4e-0d2b-4f5e-9a3b-1c2d3e4f5a6b"
+
 function json(
   status: number,
   body: unknown,
@@ -163,12 +165,27 @@ describe("methods", () => {
 
   it("email.getVerification passes the id and wait", async () => {
     const { calls, fetch } = fakeFetch(json(200, { status: "done" }))
-    await new Touchmark({ apiKey: "k", fetch }).email.getVerification("a/b", {
+    await new Touchmark({ apiKey: "k", fetch }).email.getVerification(ID, {
       wait: 5,
     })
-    expect(calls[0]?.url.pathname).toBe("/v1/email/verify/a%2Fb")
+    expect(calls[0]?.url.pathname).toBe(`/v1/email/verify/${ID}`)
     expect(calls[0]?.url.searchParams.get("wait")).toBe("5")
     expect(calls[0]?.init.body).toBeUndefined()
+  })
+
+  it.each([
+    "",
+    ".",
+    "..",
+    "../../health",
+    "a/b",
+    "v1",
+  ])("refuses the verification id %j before sending", async (id) => {
+    const { calls, fetch } = fakeFetch(json(200, { status: "done" }))
+    const tm = new Touchmark({ apiKey: "k", fetch })
+    await expect(tm.email.getVerification(id)).rejects.toThrow(TypeError)
+    await expect(tm.email.waitForVerification(id)).rejects.toThrow(TypeError)
+    expect(calls).toHaveLength(0)
   })
 })
 
@@ -224,16 +241,44 @@ describe("errors and retries", () => {
     expect(calls).toHaveLength(3)
   })
 
-  it("waits before retrying a 503 without Retry-After", async () => {
+  it("names an error body that is not an object by its status", async () => {
+    const { fetch } = fakeFetch(json(500, null))
+    await expect(
+      new Touchmark({ apiKey: "k", fetch }).account.get(),
+    ).rejects.toMatchObject({ status: 500, code: "http_500", detail: null })
+  })
+
+  it("waits 1 s, then 2 s, before retrying a 503 without Retry-After", async () => {
     vi.useFakeTimers()
     const { calls, fetch } = fakeFetch(
+      problem(503, "upstream_unavailable"),
       problem(503, "upstream_unavailable"),
       json(200, { ok: true }),
     )
     const pending = new Touchmark({ apiKey: "k", fetch }).email.validate({
       email: "a@b.co",
     })
-    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(999)
+    expect(calls).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(calls).toHaveLength(2)
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(calls).toHaveLength(2)
+    await vi.advanceTimersByTimeAsync(1)
+    await expect(pending).resolves.toEqual({ ok: true })
+    expect(calls).toHaveLength(3)
+  })
+
+  it("caps a long Retry-After at 30 s", async () => {
+    vi.useFakeTimers()
+    const { calls, fetch } = fakeFetch(
+      problem(429, "rate_limited", { "retry-after": "3600" }),
+      json(200, { ok: true }),
+    )
+    const pending = new Touchmark({ apiKey: "k", fetch }).account.get()
+    await vi.advanceTimersByTimeAsync(29_999)
+    expect(calls).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1)
     await expect(pending).resolves.toEqual({ ok: true })
     expect(calls).toHaveLength(2)
   })
@@ -292,14 +337,14 @@ describe("errors and retries", () => {
 describe("waitForVerification", () => {
   it("polls until the check is done", async () => {
     const { calls, fetch } = fakeFetch(
-      json(200, { id: "v1", status: "queued" }),
-      json(200, { id: "v1", status: "running" }),
-      json(200, { id: "v1", status: "done", result: "valid" }),
+      json(200, { id: ID, status: "queued" }),
+      json(200, { id: ID, status: "running" }),
+      json(200, { id: ID, status: "done", result: "valid" }),
     )
     const answer = await new Touchmark({
       apiKey: "k",
       fetch,
-    }).email.waitForVerification("v1")
+    }).email.waitForVerification(ID)
     expect(answer).toMatchObject({ status: "done", result: "valid" })
     expect(calls).toHaveLength(3)
     for (const call of calls) {
@@ -311,12 +356,12 @@ describe("waitForVerification", () => {
 
   it("returns the last answer when the time is up", async () => {
     const { calls, fetch } = fakeFetch(
-      json(200, { id: "v1", status: "queued" }),
+      json(200, { id: ID, status: "queued" }),
     )
     const answer = await new Touchmark({
       apiKey: "k",
       fetch,
-    }).email.waitForVerification("v1", {
+    }).email.waitForVerification(ID, {
       timeoutSeconds: 0,
     })
     expect(answer).toMatchObject({ status: "queued" })
