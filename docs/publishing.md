@@ -16,8 +16,8 @@ Expected: no diff. A diff means production serves a different document: deploy `
 
 1. Create the empty public repository and push this folder (from this folder):
    ```bash
+   git status --short   # prints nothing: the folder's history is already committed
    gh repo create marcin-marciszewski/touchmark-sdks --public --source=. --remote=origin
-   git add -A && git commit -m "Touchmark SDKs 0.1.0"
    git push -u origin main
    ```
    Expected: the CI workflow runs on `main` and ends green.
